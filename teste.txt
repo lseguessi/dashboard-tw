@@ -20,7 +20,7 @@ const SearchFilter = () => {
   const [selectedCompanie, setSelectedCompanie] = useState<string>("");
   const [selectedAccountNumber, setSelectedAccountNumber] = useState<string>("");
   const [selectedAgency, setSelectedAgency] = useState<string>("");
-  const [controlCompanie, setControlCompanie] = useState<boolean>(false);
+  const [initialLoadDone, setInitialLoadDone] = useState<boolean>(false);
 
   // Função para carregar todas as opções sem filtro
   const loadAllOptions = () => {
@@ -249,63 +249,46 @@ const SearchFilter = () => {
     }
   }, [userDetails]);
 
-  // Detectar empresa inicial do usuário
+  // Configurar os valores iniciais baseados no usuário logado
   useEffect(() => {
-    if (controlCompanie || !companies || companies.length === 0 || !userDetails?.accounts) return;
-
-    // Obtém os dados da conta atual do usuário
-    const currentCompanyCnpj = useAuthStore?.currentCompanyAccount?.accountDetail?.company?.cnpj;
-    const currentAgency = useAuthStore?.currentCompanyAccount?.accountDetail?.agency;
-    const currentAccountNumber = useAuthStore?.currentCompanyAccount?.accountDetail?.accountNumber;
-
-    if (!currentCompanyCnpj) return;
-
-    // Verifica se existe a empresa nas opções disponíveis
+    // Evitar execução múltipla
+    if (initialLoadDone || !companies || companies.length <= 1 || !userDetails?.accounts) return;
+    
+    const currentAccount = useAuthStore?.currentCompanyAccount?.accountDetail;
+    if (!currentAccount) return;
+    
+    const currentCompanyCnpj = currentAccount.company?.cnpj;
+    const currentAgency = currentAccount.agency;
+    const currentAccountNumber = currentAccount.accountNumber;
+    
+    // Verificar se os valores existem
+    if (!currentCompanyCnpj || !currentAgency || !currentAccountNumber) return;
+    
+    // Verificar se empresa existe nas opções
     const companyExists = companies.some(company => company.id === currentCompanyCnpj);
     if (!companyExists) return;
-
-    // Prepara os dados para filtrar
-    const filteredItems = userDetails.accounts.filter(
-      (item: any) => item.company.cnpj === currentCompanyCnpj
-    );
-
-    // Verifica se a agência e conta existem para essa empresa
-    const agencyExists = filteredItems.some(item => item.company.agency === currentAgency);
-    const accountExists = filteredItems.some(item => item.company.accountNumber === currentAccountNumber);
-
-    // Define os valores selecionados
+    
+    // Definir valores iniciais
     setSelectedCompanie(currentCompanyCnpj);
+    setSelectedAgency(currentAgency);
+    setSelectedAccountNumber(currentAccountNumber);
     
-    // Primeiro filtra por empresa para carregar as opções de agência e conta
+    // Aplicar filtros em sequência correta
     filterByCompany(currentCompanyCnpj);
-
-    // Define agência e conta, se existirem
-    if (agencyExists && currentAgency) {
-      setSelectedAgency(currentAgency);
-    }
     
-    if (accountExists && currentAccountNumber) {
-      setSelectedAccountNumber(currentAccountNumber);
-    }
-
-    // Atualiza os filtros após definir todos os valores
-    updateFilters();
+    // Marcar como inicializado para evitar reexecução
+    setInitialLoadDone(true);
     
-    setControlCompanie(true);
+    console.log("Valores iniciais definidos:", {
+      empresa: currentCompanyCnpj,
+      agencia: currentAgency,
+      conta: currentAccountNumber
+    });
   }, [companies, useAuthStore?.currentCompanyAccount, userDetails]);
 
   // Atualizar filtros quando as seleções mudarem
   useEffect(() => {
     updateFilters();
-  }, [selectedCompanie, selectedAgency, selectedAccountNumber]);
-
-  // Logging para debug
-  useEffect(() => {
-    console.log("Filtros atualizados:", {
-      empresa: selectedCompanie,
-      agencia: selectedAgency,
-      conta: selectedAccountNumber
-    });
   }, [selectedCompanie, selectedAgency, selectedAccountNumber]);
 
   return (
@@ -317,8 +300,8 @@ const SearchFilter = () => {
         onSelect={(value) => filterByCompany(value)}
         options={companies}
         variant="medium"
-        value={selectedCompanie || ""}
         defaultOption={selectedCompanie || ""}
+        value={selectedCompanie || ""}
       />
       <Select
         behavior="regular"
@@ -327,8 +310,8 @@ const SearchFilter = () => {
         onSelect={(value) => filterByAgency(value)}
         options={agencys}
         variant="medium"
-        value={selectedAgency || ""}
         defaultOption={selectedAgency || ""}
+        value={selectedAgency || ""}
       />
       <Select
         behavior="regular"
@@ -337,8 +320,8 @@ const SearchFilter = () => {
         onSelect={(value) => filterByAccount(value)}
         options={accounts}
         variant="medium"
-        value={selectedAccountNumber || ""}
         defaultOption={selectedAccountNumber || ""}
+        value={selectedAccountNumber || ""}
       />
     </SearchArea>
   );
