@@ -1,0 +1,327 @@
+import { useEffect, useState } from "react";
+import { Select } from "@/components/web-cross";
+import { SearchArea } from "./styles";
+import { useOperatorStore } from "@/presentation/store/use-operator-store";
+import { useCurrentAccountStore } from "login_app/useCurrentAccountStore";
+
+interface Option {
+  value: string;
+  id: string;
+}
+
+const SearchFilter = () => {
+  const useAuthStore = useCurrentAccountStore();
+  const { setFilterOptions, filterOptions, userDetails } = useOperatorStore();
+  
+  const [companies, setCompanies] = useState<Option[]>([]);
+  const [accounts, setAccounts] = useState<Option[]>([]);
+  const [agencys, setAgencys] = useState<Option[]>([]);
+  
+  const [selectedCompanie, setSelectedCompanie] = useState<string>("");
+  const [selectedAccountNumber, setSelectedAccountNumber] = useState<string>("");
+  const [selectedAgency, setSelectedAgency] = useState<string>("");
+  const [controlCompanie, setControlCompanie] = useState<boolean>(false);
+
+  // Função para carregar todas as opções sem filtro
+  const loadAllOptions = () => {
+    if (!userDetails?.accounts) return;
+
+    // Extrair todas as empresas
+    const allCompanies = userDetails.accounts.map((item: any) => ({
+      id: item.company.cnpj,
+      value: item.company.name,
+    }));
+
+    // Extrair todas as contas
+    const allAccounts = userDetails.accounts.map((item: any) => ({
+      id: item.company.accountNumber,
+      value: item.company.accountNumber,
+    }));
+
+    // Extrair todas as agências
+    const allAgencies = userDetails.accounts.map((item: any) => ({
+      id: item.company.agency,
+      value: item.company.agency,
+    }));
+
+    // Remover duplicados
+    const uniqueCompanies = allCompanies.filter((comp, index, self) =>
+      index === self.findIndex((c) => c.id === comp.id)
+    );
+
+    const uniqueAccounts = allAccounts.filter((acc, index, self) =>
+      index === self.findIndex((a) => a.id === acc.id)
+    );
+
+    const uniqueAgencies = allAgencies.filter((agency, index, self) =>
+      index === self.findIndex((a) => a.id === agency.id)
+    );
+
+    // Adicionar opções vazias
+    const companiesWithEmpty = [{ id: "", value: "Selecione uma empresa" }, ...uniqueCompanies];
+    const accountsWithEmpty = [{ id: "", value: "Selecione uma conta" }, ...uniqueAccounts];
+    const agenciesWithEmpty = [{ id: "", value: "Selecione uma agência" }, ...uniqueAgencies];
+
+    setCompanies(companiesWithEmpty);
+    setAccounts(accountsWithEmpty);
+    setAgencys(agenciesWithEmpty);
+  };
+
+  // Filtrar por empresa
+  const filterByCompany = (companyId: string) => {
+    setSelectedCompanie(companyId);
+
+    // Se não houver empresa selecionada, mostrar tudo
+    if (!companyId) {
+      loadAllOptions();
+      return;
+    }
+
+    // Filtrar agências e contas da empresa selecionada
+    const filteredItems = userDetails?.accounts.filter(
+      (item: any) => item.company.cnpj === companyId
+    );
+
+    // Extrair agências e contas
+    const filteredAgencies = filteredItems?.map((item: any) => ({
+      id: item.company.agency,
+      value: item.company.agency,
+    }));
+
+    const filteredAccounts = filteredItems?.map((item: any) => ({
+      id: item.company.accountNumber,
+      value: item.company.accountNumber,
+    }));
+
+    // Remover duplicados
+    const uniqueAgencies = filteredAgencies?.filter((agency, index, self) =>
+      index === self.findIndex((a) => a.id === agency.id)
+    );
+
+    const uniqueAccounts = filteredAccounts?.filter((acc, index, self) =>
+      index === self.findIndex((a) => a.id === acc.id)
+    );
+
+    // Adicionar opções vazias
+    const agenciesWithEmpty = [{ id: "", value: "Selecione uma agência" }, ...(uniqueAgencies || [])];
+    const accountsWithEmpty = [{ id: "", value: "Selecione uma conta" }, ...(uniqueAccounts || [])];
+
+    // Limpar seleções de agência e conta se não forem compatíveis
+    const isAgencyCompatible = uniqueAgencies?.some(agency => agency.id === selectedAgency);
+    const isAccountCompatible = uniqueAccounts?.some(acc => acc.id === selectedAccountNumber);
+
+    if (!isAgencyCompatible) setSelectedAgency("");
+    if (!isAccountCompatible) setSelectedAccountNumber("");
+
+    // Atualizar selects
+    setAgencys(agenciesWithEmpty);
+    setAccounts(accountsWithEmpty);
+  };
+
+  // Filtrar por agência
+  const filterByAgency = (agencyId: string) => {
+    setSelectedAgency(agencyId);
+
+    // Se não houver agência selecionada, mostrar tudo ou filtrar por empresa
+    if (!agencyId) {
+      if (selectedCompanie) {
+        filterByCompany(selectedCompanie);
+      } else if (selectedAccountNumber) {
+        filterByAccount(selectedAccountNumber);
+      } else {
+        loadAllOptions();
+      }
+      return;
+    }
+
+    // Filtrar empresas e contas pela agência selecionada
+    const filteredItems = userDetails?.accounts.filter(
+      (item: any) => item.company.agency === agencyId
+    );
+
+    // Extrair empresas e contas
+    const filteredCompanies = filteredItems?.map((item: any) => ({
+      id: item.company.cnpj,
+      value: item.company.name,
+    }));
+
+    const filteredAccounts = filteredItems?.map((item: any) => ({
+      id: item.company.accountNumber,
+      value: item.company.accountNumber,
+    }));
+
+    // Remover duplicados
+    const uniqueCompanies = filteredCompanies?.filter((company, index, self) =>
+      index === self.findIndex((c) => c.id === company.id)
+    );
+
+    const uniqueAccounts = filteredAccounts?.filter((acc, index, self) =>
+      index === self.findIndex((a) => a.id === acc.id)
+    );
+
+    // Adicionar opções vazias
+    const companiesWithEmpty = [{ id: "", value: "Selecione uma empresa" }, ...(uniqueCompanies || [])];
+    const accountsWithEmpty = [{ id: "", value: "Selecione uma conta" }, ...(uniqueAccounts || [])];
+
+    // Limpar seleções de empresa e conta se não forem compatíveis
+    const isCompanyCompatible = uniqueCompanies?.some(company => company.id === selectedCompanie);
+    const isAccountCompatible = uniqueAccounts?.some(acc => acc.id === selectedAccountNumber);
+
+    if (!isCompanyCompatible) setSelectedCompanie("");
+    if (!isAccountCompatible) setSelectedAccountNumber("");
+
+    // Atualizar selects
+    setCompanies(companiesWithEmpty);
+    setAccounts(accountsWithEmpty);
+  };
+
+  // Filtrar por conta
+  const filterByAccount = (accountId: string) => {
+    setSelectedAccountNumber(accountId);
+
+    // Se não houver conta selecionada, mostrar tudo ou filtrar por empresa/agência
+    if (!accountId) {
+      if (selectedCompanie) {
+        filterByCompany(selectedCompanie);
+      } else if (selectedAgency) {
+        filterByAgency(selectedAgency);
+      } else {
+        loadAllOptions();
+      }
+      return;
+    }
+
+    // Filtrar empresas e agências pela conta selecionada
+    const filteredItems = userDetails?.accounts.filter(
+      (item: any) => item.company.accountNumber === accountId
+    );
+
+    // Extrair empresas e agências
+    const filteredCompanies = filteredItems?.map((item: any) => ({
+      id: item.company.cnpj,
+      value: item.company.name,
+    }));
+
+    const filteredAgencies = filteredItems?.map((item: any) => ({
+      id: item.company.agency,
+      value: item.company.agency,
+    }));
+
+    // Remover duplicados
+    const uniqueCompanies = filteredCompanies?.filter((company, index, self) =>
+      index === self.findIndex((c) => c.id === company.id)
+    );
+
+    const uniqueAgencies = filteredAgencies?.filter((agency, index, self) =>
+      index === self.findIndex((a) => a.id === agency.id)
+    );
+
+    // Adicionar opções vazias
+    const companiesWithEmpty = [{ id: "", value: "Selecione uma empresa" }, ...(uniqueCompanies || [])];
+    const agenciesWithEmpty = [{ id: "", value: "Selecione uma agência" }, ...(uniqueAgencies || [])];
+
+    // Limpar seleções de empresa e agência se não forem compatíveis
+    const isCompanyCompatible = uniqueCompanies?.some(company => company.id === selectedCompanie);
+    const isAgencyCompatible = uniqueAgencies?.some(agency => agency.id === selectedAgency);
+
+    if (!isCompanyCompatible) setSelectedCompanie("");
+    if (!isAgencyCompatible) setSelectedAgency("");
+
+    // Atualizar selects
+    setCompanies(companiesWithEmpty);
+    setAgencys(agenciesWithEmpty);
+  };
+
+  // Atualizar os filtros
+  const updateFilters = () => {
+    setFilterOptions({
+      ...filterOptions,
+      accountNumber: selectedAccountNumber || "",
+      cnpj: selectedCompanie || "",
+      agency: selectedAgency ? Number(selectedAgency) : undefined,
+    });
+  };
+
+  // Inicializar dados
+  useEffect(() => {
+    if (userDetails?.accounts) {
+      loadAllOptions();
+    }
+  }, [userDetails]);
+
+  // Detectar empresa inicial do usuário
+  useEffect(() => {
+    if (controlCompanie || !companies || companies.length === 0) return;
+
+    const currentCompanyCnpj = useAuthStore?.currentCompanyAccount?.accountDetail?.company?.cnpj;
+    if (!currentCompanyCnpj) return;
+
+    const companyExists = companies.some(company => company.id === currentCompanyCnpj);
+    if (!companyExists) return;
+
+    filterByCompany(currentCompanyCnpj);
+    setSelectedCompanie(currentCompanyCnpj);
+    
+    const agency = useAuthStore?.currentCompanyAccount?.accountDetail?.agency;
+    if (agency) {
+      setSelectedAgency(agency);
+      filterByAgency(agency);
+    }
+    
+    const accountNumber = useAuthStore?.currentCompanyAccount?.accountDetail?.accountNumber;
+    if (accountNumber) {
+      setSelectedAccountNumber(accountNumber);
+      filterByAccount(accountNumber);
+    }
+    
+    setControlCompanie(true);
+  }, [companies, useAuthStore?.currentCompanyAccount]);
+
+  // Atualizar filtros quando as seleções mudarem
+  useEffect(() => {
+    updateFilters();
+  }, [selectedCompanie, selectedAgency, selectedAccountNumber]);
+
+  // Logging para debug
+  useEffect(() => {
+    console.log("Filtros atualizados:", {
+      empresa: selectedCompanie,
+      agencia: selectedAgency,
+      conta: selectedAccountNumber
+    });
+  }, [selectedCompanie, selectedAgency, selectedAccountNumber]);
+
+  return (
+    <SearchArea>
+      <Select
+        behavior="regular"
+        errorDescription="Campo inválido."
+        label="Empresa"
+        onSelect={(value) => filterByCompany(value)}
+        options={companies}
+        variant="medium"
+        defaultOption={selectedCompanie || ""}
+      />
+      <Select
+        behavior="regular"
+        errorDescription="Campo inválido."
+        label="Agência"
+        onSelect={(value) => filterByAgency(value)}
+        options={agencys}
+        variant="medium"
+        defaultOption={selectedAgency || ""}
+      />
+      <Select
+        behavior="regular"
+        errorDescription="Campo inválido."
+        label="Conta"
+        onSelect={(value) => filterByAccount(value)}
+        options={accounts}
+        variant="medium"
+        defaultOption={selectedAccountNumber || ""}
+      />
+    </SearchArea>
+  );
+};
+
+export default SearchFilter;
