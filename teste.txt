@@ -262,19 +262,70 @@ const SearchFilter = () => {
     const currentAccountNumber = currentAccount.accountNumber;
     
     // Verificar se os valores existem
-    if (!currentCompanyCnpj || !currentAgency || !currentAccountNumber) return;
+    if (!currentCompanyCnpj) return;
     
     // Verificar se empresa existe nas opções
     const companyExists = companies.some(company => company.id === currentCompanyCnpj);
     if (!companyExists) return;
     
-    // Definir valores iniciais
-    setSelectedCompanie(currentCompanyCnpj);
-    setSelectedAgency(currentAgency);
-    setSelectedAccountNumber(currentAccountNumber);
+    // Primeiro, carregamos todas as opções para garantir que temos dados completos
+    loadAllOptions();
     
-    // Aplicar filtros em sequência correta
-    filterByCompany(currentCompanyCnpj);
+    // Definir o valor da empresa primeiro
+    setSelectedCompanie(currentCompanyCnpj);
+    
+    // Filtrar as opções baseadas na empresa selecionada
+    const filteredItems = userDetails?.accounts.filter(
+      (item) => item.company.cnpj === currentCompanyCnpj
+    );
+    
+    // Extrair agências e contas compatíveis
+    const filteredAgencies = filteredItems?.map((item) => ({
+      id: item.company.agency,
+      value: item.company.agency,
+    }));
+    
+    const filteredAccounts = filteredItems?.map((item) => ({
+      id: item.company.accountNumber,
+      value: item.company.accountNumber,
+    }));
+    
+    // Remover duplicados
+    const uniqueAgencies = filteredAgencies?.filter((agency, index, self) =>
+      index === self.findIndex((a) => a.id === agency.id)
+    );
+    
+    const uniqueAccounts = filteredAccounts?.filter((acc, index, self) =>
+      index === self.findIndex((a) => a.id === acc.id)
+    );
+    
+    // Adicionar opções vazias
+    const agenciesWithEmpty = [{ id: "", value: "Selecione uma agência" }, ...(uniqueAgencies || [])];
+    const accountsWithEmpty = [{ id: "", value: "Selecione uma conta" }, ...(uniqueAccounts || [])];
+    
+    // Atualizar as opções de agência e conta
+    setAgencys(agenciesWithEmpty);
+    setAccounts(accountsWithEmpty);
+    
+    // Definir valores iniciais de agência e conta se existirem
+    if (currentAgency) {
+      // Verificar se a agência existe nas opções filtradas
+      const agencyExists = uniqueAgencies?.some(agency => agency.id === currentAgency);
+      if (agencyExists) {
+        setSelectedAgency(currentAgency);
+      }
+    }
+    
+    if (currentAccountNumber) {
+      // Verificar se a conta existe nas opções filtradas
+      const accountExists = uniqueAccounts?.some(acc => acc.id === currentAccountNumber);
+      if (accountExists) {
+        setSelectedAccountNumber(currentAccountNumber);
+      }
+    }
+    
+    // Atualizar os filtros explicitamente
+    updateFilters();
     
     // Marcar como inicializado para evitar reexecução
     setInitialLoadDone(true);
@@ -282,7 +333,9 @@ const SearchFilter = () => {
     console.log("Valores iniciais definidos:", {
       empresa: currentCompanyCnpj,
       agencia: currentAgency,
-      conta: currentAccountNumber
+      conta: currentAccountNumber,
+      agencyOptions: uniqueAgencies,
+      accountOptions: uniqueAccounts
     });
   }, [companies, useAuthStore?.currentCompanyAccount, userDetails]);
 
