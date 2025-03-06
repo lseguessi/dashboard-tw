@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { Select } from "@/components/web-cross";
 import { SearchArea } from "./styles";
 import { useOperatorStore } from "@/presentation/store/use-operator-store";
@@ -20,10 +20,10 @@ const SearchFilter = () => {
   const [selectedCompanie, setSelectedCompanie] = useState<string>("");
   const [selectedAccountNumber, setSelectedAccountNumber] = useState<string>("");
   const [selectedAgency, setSelectedAgency] = useState<string>("");
-  const [initialLoadDone, setInitialLoadDone] = useState<boolean>(false);
+  const isInitialized = useRef(false);
 
-  // Função para carregar todas as opções sem filtro
-  const loadAllOptions = () => {
+  // Memoizar a função para carregar todas as opções
+  const loadAllOptions = useCallback(() => {
     if (!userDetails?.accounts) return;
 
     // Extrair todas as empresas
@@ -65,50 +65,53 @@ const SearchFilter = () => {
     setCompanies(companiesWithEmpty);
     setAccounts(accountsWithEmpty);
     setAgencys(agenciesWithEmpty);
-  };
+  }, [userDetails]);
 
-  // Filtrar por empresa
-  const filterByCompany = (companyId: string) => {
-    setSelectedCompanie(companyId);
+  // Memoizar a função de filtro por empresa
+  const filterByCompany = useCallback((companyId: string) => {
+    if (!userDetails?.accounts) return;
 
     // Se não houver empresa selecionada, mostrar tudo
     if (!companyId) {
+      setSelectedCompanie("");
       loadAllOptions();
       return;
     }
 
+    setSelectedCompanie(companyId);
+
     // Filtrar agências e contas da empresa selecionada
-    const filteredItems = userDetails?.accounts.filter(
+    const filteredItems = userDetails.accounts.filter(
       (item: any) => item.company.cnpj === companyId
     );
 
     // Extrair agências e contas
-    const filteredAgencies = filteredItems?.map((item: any) => ({
+    const filteredAgencies = filteredItems.map((item: any) => ({
       id: item.company.agency,
       value: item.company.agency,
     }));
 
-    const filteredAccounts = filteredItems?.map((item: any) => ({
+    const filteredAccounts = filteredItems.map((item: any) => ({
       id: item.company.accountNumber,
       value: item.company.accountNumber,
     }));
 
     // Remover duplicados
-    const uniqueAgencies = filteredAgencies?.filter((agency, index, self) =>
+    const uniqueAgencies = filteredAgencies.filter((agency, index, self) =>
       index === self.findIndex((a) => a.id === agency.id)
     );
 
-    const uniqueAccounts = filteredAccounts?.filter((acc, index, self) =>
+    const uniqueAccounts = filteredAccounts.filter((acc, index, self) =>
       index === self.findIndex((a) => a.id === acc.id)
     );
 
     // Adicionar opções vazias
-    const agenciesWithEmpty = [{ id: "", value: "Selecione uma agência" }, ...(uniqueAgencies || [])];
-    const accountsWithEmpty = [{ id: "", value: "Selecione uma conta" }, ...(uniqueAccounts || [])];
+    const agenciesWithEmpty = [{ id: "", value: "Selecione uma agência" }, ...uniqueAgencies];
+    const accountsWithEmpty = [{ id: "", value: "Selecione uma conta" }, ...uniqueAccounts];
 
     // Limpar seleções de agência e conta se não forem compatíveis
-    const isAgencyCompatible = uniqueAgencies?.some(agency => agency.id === selectedAgency);
-    const isAccountCompatible = uniqueAccounts?.some(acc => acc.id === selectedAccountNumber);
+    const isAgencyCompatible = uniqueAgencies.some(agency => agency.id === selectedAgency);
+    const isAccountCompatible = uniqueAccounts.some(acc => acc.id === selectedAccountNumber);
 
     if (!isAgencyCompatible) setSelectedAgency("");
     if (!isAccountCompatible) setSelectedAccountNumber("");
@@ -116,233 +119,157 @@ const SearchFilter = () => {
     // Atualizar selects
     setAgencys(agenciesWithEmpty);
     setAccounts(accountsWithEmpty);
-  };
 
-  // Filtrar por agência
-  const filterByAgency = (agencyId: string) => {
-    setSelectedAgency(agencyId);
+    // Atualizar filtros
+    updateFilters(companyId, isAgencyCompatible ? selectedAgency : "", isAccountCompatible ? selectedAccountNumber : "");
+  }, [userDetails, selectedAgency, selectedAccountNumber, loadAllOptions]);
+
+  // Memoizar a função de filtro por agência
+  const filterByAgency = useCallback((agencyId: string) => {
+    if (!userDetails?.accounts) return;
 
     // Se não houver agência selecionada, mostrar tudo ou filtrar por empresa
     if (!agencyId) {
+      setSelectedAgency("");
       if (selectedCompanie) {
         filterByCompany(selectedCompanie);
-      } else if (selectedAccountNumber) {
-        filterByAccount(selectedAccountNumber);
       } else {
         loadAllOptions();
       }
       return;
     }
 
+    setSelectedAgency(agencyId);
+
     // Filtrar empresas e contas pela agência selecionada
-    const filteredItems = userDetails?.accounts.filter(
+    const filteredItems = userDetails.accounts.filter(
       (item: any) => item.company.agency === agencyId
     );
 
-    // Extrair empresas e contas
-    const filteredCompanies = filteredItems?.map((item: any) => ({
-      id: item.company.cnpj,
-      value: item.company.name,
-    }));
+    // Se não estamos filtrando também por empresa
+    if (!selectedCompanie) {
+      // Extrair empresas
+      const filteredCompanies = filteredItems.map((item: any) => ({
+        id: item.company.cnpj,
+        value: item.company.name,
+      }));
 
-    const filteredAccounts = filteredItems?.map((item: any) => ({
+      // Remover duplicados
+      const uniqueCompanies = filteredCompanies.filter((company, index, self) =>
+        index === self.findIndex((c) => c.id === company.id)
+      );
+
+      // Adicionar opções vazias
+      const companiesWithEmpty = [{ id: "", value: "Selecione uma empresa" }, ...uniqueCompanies];
+      setCompanies(companiesWithEmpty);
+    }
+
+    // Extrair contas
+    const filteredAccounts = filteredItems.map((item: any) => ({
       id: item.company.accountNumber,
       value: item.company.accountNumber,
     }));
 
     // Remover duplicados
-    const uniqueCompanies = filteredCompanies?.filter((company, index, self) =>
-      index === self.findIndex((c) => c.id === company.id)
-    );
-
-    const uniqueAccounts = filteredAccounts?.filter((acc, index, self) =>
+    const uniqueAccounts = filteredAccounts.filter((acc, index, self) =>
       index === self.findIndex((a) => a.id === acc.id)
     );
 
     // Adicionar opções vazias
-    const companiesWithEmpty = [{ id: "", value: "Selecione uma empresa" }, ...(uniqueCompanies || [])];
-    const accountsWithEmpty = [{ id: "", value: "Selecione uma conta" }, ...(uniqueAccounts || [])];
+    const accountsWithEmpty = [{ id: "", value: "Selecione uma conta" }, ...uniqueAccounts];
 
-    // Limpar seleções de empresa e conta se não forem compatíveis
-    const isCompanyCompatible = uniqueCompanies?.some(company => company.id === selectedCompanie);
-    const isAccountCompatible = uniqueAccounts?.some(acc => acc.id === selectedAccountNumber);
-
-    if (!isCompanyCompatible) setSelectedCompanie("");
+    // Verificar compatibilidade da conta
+    const isAccountCompatible = uniqueAccounts.some(acc => acc.id === selectedAccountNumber);
     if (!isAccountCompatible) setSelectedAccountNumber("");
 
     // Atualizar selects
-    setCompanies(companiesWithEmpty);
     setAccounts(accountsWithEmpty);
-  };
 
-  // Filtrar por conta
-  const filterByAccount = (accountId: string) => {
-    setSelectedAccountNumber(accountId);
+    // Atualizar filtros
+    updateFilters(selectedCompanie, agencyId, isAccountCompatible ? selectedAccountNumber : "");
+  }, [userDetails, selectedCompanie, selectedAccountNumber, filterByCompany, loadAllOptions]);
+
+  // Memoizar a função de filtro por conta
+  const filterByAccount = useCallback((accountId: string) => {
+    if (!userDetails?.accounts) return;
 
     // Se não houver conta selecionada, mostrar tudo ou filtrar por empresa/agência
     if (!accountId) {
-      if (selectedCompanie) {
-        filterByCompany(selectedCompanie);
-      } else if (selectedAgency) {
-        filterByAgency(selectedAgency);
+      setSelectedAccountNumber("");
+      if (selectedCompanie || selectedAgency) {
+        // Manter os filtros existentes
+        updateFilters(selectedCompanie, selectedAgency, "");
       } else {
         loadAllOptions();
       }
       return;
     }
 
-    // Filtrar empresas e agências pela conta selecionada
-    const filteredItems = userDetails?.accounts.filter(
-      (item: any) => item.company.accountNumber === accountId
-    );
+    setSelectedAccountNumber(accountId);
+    updateFilters(selectedCompanie, selectedAgency, accountId);
+  }, [userDetails, selectedCompanie, selectedAgency, loadAllOptions]);
 
-    // Extrair empresas e agências
-    const filteredCompanies = filteredItems?.map((item: any) => ({
-      id: item.company.cnpj,
-      value: item.company.name,
-    }));
-
-    const filteredAgencies = filteredItems?.map((item: any) => ({
-      id: item.company.agency,
-      value: item.company.agency,
-    }));
-
-    // Remover duplicados
-    const uniqueCompanies = filteredCompanies?.filter((company, index, self) =>
-      index === self.findIndex((c) => c.id === company.id)
-    );
-
-    const uniqueAgencies = filteredAgencies?.filter((agency, index, self) =>
-      index === self.findIndex((a) => a.id === agency.id)
-    );
-
-    // Adicionar opções vazias
-    const companiesWithEmpty = [{ id: "", value: "Selecione uma empresa" }, ...(uniqueCompanies || [])];
-    const agenciesWithEmpty = [{ id: "", value: "Selecione uma agência" }, ...(uniqueAgencies || [])];
-
-    // Limpar seleções de empresa e agência se não forem compatíveis
-    const isCompanyCompatible = uniqueCompanies?.some(company => company.id === selectedCompanie);
-    const isAgencyCompatible = uniqueAgencies?.some(agency => agency.id === selectedAgency);
-
-    if (!isCompanyCompatible) setSelectedCompanie("");
-    if (!isAgencyCompatible) setSelectedAgency("");
-
-    // Atualizar selects
-    setCompanies(companiesWithEmpty);
-    setAgencys(agenciesWithEmpty);
-  };
-
-  // Atualizar os filtros
-  const updateFilters = () => {
+  // Memoizar a função para atualizar filtros
+  const updateFilters = useCallback((company: string, agency: string, account: string) => {
     setFilterOptions({
       ...filterOptions,
-      accountNumber: selectedAccountNumber || "",
-      cnpj: selectedCompanie || "",
-      agency: selectedAgency ? Number(selectedAgency) : undefined,
+      accountNumber: account || "",
+      cnpj: company || "",
+      agency: agency ? Number(agency) : undefined,
     });
-  };
+  }, [filterOptions, setFilterOptions]);
 
-  // Inicializar dados
+  // Efeito único para inicialização
   useEffect(() => {
-    if (userDetails?.accounts) {
-      loadAllOptions();
-    }
-  }, [userDetails]);
+    // Se já inicializamos ou não temos dados, retornar
+    if (isInitialized.current || !userDetails?.accounts) return;
 
-  // Configurar os valores iniciais baseados no usuário logado
-  useEffect(() => {
-    // Evitar execução múltipla
-    if (initialLoadDone || !companies || companies.length <= 1 || !userDetails?.accounts) return;
-    
+    // Carregar todas as opções
+    loadAllOptions();
+
+    // Buscar os dados do usuário atual
     const currentAccount = useAuthStore?.currentCompanyAccount?.accountDetail;
-    if (!currentAccount) return;
-    
+    if (!currentAccount) {
+      isInitialized.current = true;
+      return;
+    }
+
     const currentCompanyCnpj = currentAccount.company?.cnpj;
     const currentAgency = currentAccount.agency;
     const currentAccountNumber = currentAccount.accountNumber;
-    
-    // Verificar se os valores existem
-    if (!currentCompanyCnpj) return;
-    
-    // Verificar se empresa existe nas opções
-    const companyExists = companies.some(company => company.id === currentCompanyCnpj);
-    if (!companyExists) return;
-    
-    // Primeiro, carregamos todas as opções para garantir que temos dados completos
-    loadAllOptions();
-    
-    // Definir o valor da empresa primeiro
-    setSelectedCompanie(currentCompanyCnpj);
-    
-    // Filtrar as opções baseadas na empresa selecionada
-    const filteredItems = userDetails?.accounts.filter(
-      (item) => item.company.cnpj === currentCompanyCnpj
-    );
-    
-    // Extrair agências e contas compatíveis
-    const filteredAgencies = filteredItems?.map((item) => ({
-      id: item.company.agency,
-      value: item.company.agency,
-    }));
-    
-    const filteredAccounts = filteredItems?.map((item) => ({
-      id: item.company.accountNumber,
-      value: item.company.accountNumber,
-    }));
-    
-    // Remover duplicados
-    const uniqueAgencies = filteredAgencies?.filter((agency, index, self) =>
-      index === self.findIndex((a) => a.id === agency.id)
-    );
-    
-    const uniqueAccounts = filteredAccounts?.filter((acc, index, self) =>
-      index === self.findIndex((a) => a.id === acc.id)
-    );
-    
-    // Adicionar opções vazias
-    const agenciesWithEmpty = [{ id: "", value: "Selecione uma agência" }, ...(uniqueAgencies || [])];
-    const accountsWithEmpty = [{ id: "", value: "Selecione uma conta" }, ...(uniqueAccounts || [])];
-    
-    // Atualizar as opções de agência e conta
-    setAgencys(agenciesWithEmpty);
-    setAccounts(accountsWithEmpty);
-    
-    // Definir valores iniciais de agência e conta se existirem
-    if (currentAgency) {
-      // Verificar se a agência existe nas opções filtradas
-      const agencyExists = uniqueAgencies?.some(agency => agency.id === currentAgency);
-      if (agencyExists) {
+
+    // Se não temos pelo menos a empresa, não podemos inicializar
+    if (!currentCompanyCnpj) {
+      isInitialized.current = true;
+      return;
+    }
+
+    // Definir os valores iniciais e disparar a filtragem
+    setTimeout(() => {
+      // Primeiro, atualizamos os estados diretamente para evitar múltiplas renderizações
+      setSelectedCompanie(currentCompanyCnpj);
+      
+      if (currentAgency) {
         setSelectedAgency(currentAgency);
       }
-    }
-    
-    if (currentAccountNumber) {
-      // Verificar se a conta existe nas opções filtradas
-      const accountExists = uniqueAccounts?.some(acc => acc.id === currentAccountNumber);
-      if (accountExists) {
+      
+      if (currentAccountNumber) {
         setSelectedAccountNumber(currentAccountNumber);
       }
-    }
-    
-    // Atualizar os filtros explicitamente
-    updateFilters();
-    
-    // Marcar como inicializado para evitar reexecução
-    setInitialLoadDone(true);
-    
-    console.log("Valores iniciais definidos:", {
-      empresa: currentCompanyCnpj,
-      agencia: currentAgency,
-      conta: currentAccountNumber,
-      agencyOptions: uniqueAgencies,
-      accountOptions: uniqueAccounts
-    });
-  }, [companies, useAuthStore?.currentCompanyAccount, userDetails]);
-
-  // Atualizar filtros quando as seleções mudarem
-  useEffect(() => {
-    updateFilters();
-  }, [selectedCompanie, selectedAgency, selectedAccountNumber]);
+      
+      // Agora filtramos para atualizar as opções disponíveis
+      filterByCompany(currentCompanyCnpj);
+      
+      // Marcar como inicializado
+      isInitialized.current = true;
+      
+      console.log("Inicialização completa:", {
+        empresa: currentCompanyCnpj,
+        agencia: currentAgency,
+        conta: currentAccountNumber
+      });
+    }, 0);
+  }, [userDetails, useAuthStore?.currentCompanyAccount, loadAllOptions, filterByCompany]);
 
   return (
     <SearchArea>
@@ -350,30 +277,27 @@ const SearchFilter = () => {
         behavior="regular"
         errorDescription="Campo inválido."
         label="Empresa"
-        onSelect={(value) => filterByCompany(value)}
+        onSelect={filterByCompany}
         options={companies}
         variant="medium"
-        defaultOption={selectedCompanie || ""}
         value={selectedCompanie || ""}
       />
       <Select
         behavior="regular"
         errorDescription="Campo inválido."
         label="Agência"
-        onSelect={(value) => filterByAgency(value)}
+        onSelect={filterByAgency}
         options={agencys}
         variant="medium"
-        defaultOption={selectedAgency || ""}
         value={selectedAgency || ""}
       />
       <Select
         behavior="regular"
         errorDescription="Campo inválido."
         label="Conta"
-        onSelect={(value) => filterByAccount(value)}
+        onSelect={filterByAccount}
         options={accounts}
         variant="medium"
-        defaultOption={selectedAccountNumber || ""}
         value={selectedAccountNumber || ""}
       />
     </SearchArea>
